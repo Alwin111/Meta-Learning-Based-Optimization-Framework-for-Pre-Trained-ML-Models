@@ -4,3 +4,35 @@ __pycache__/
 data/
 mlruns/
 .ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.env/
+.env*/
+
+# PyTorch / ML
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Logs & caches
+logs/
+wandb/
+.cache/
+
+# IDE
+.vscode/
+.idea/
