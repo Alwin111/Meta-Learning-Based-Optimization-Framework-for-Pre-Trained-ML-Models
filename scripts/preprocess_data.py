@@ -1,58 +1,53 @@
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+import pickle
+import numpy as np
 from pathlib import Path
 
-RAW_PATH = Path("data/raw/ciciot-2023.csv")
-PROCESSED_DIR = Path("data/processed")
+RAW_DIR = Path("data/raw/cifar-10-batches-py")
+PROCESSED_DIR = Path("data/processed/cifar10")
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
-TARGET_COLUMN = "label"
-CHUNK_SIZE = 100_000
-MAX_ROWS = 1_000_000   # 1 million rows (safe & sufficient)
 
-X_chunks = []
-y_chunks = []
-rows_read = 0
+def load_batch(batch_path):
+    with open(batch_path, "rb") as f:
+        batch = pickle.load(f, encoding="bytes")
+    X = batch[b"data"]
+    y = batch[b"labels"]
+    return X, y
 
-print("Starting chunk-based preprocessing...")
 
-for chunk in pd.read_csv(RAW_PATH, chunksize=CHUNK_SIZE):
-    chunk = chunk.dropna()
+def preprocess_cifar10():
+    print("🔹 Loading CIFAR-10 training batches...")
+    X_train_list, y_train_list = [], []
 
-    X = chunk.drop(columns=[TARGET_COLUMN])
-    y = chunk[TARGET_COLUMN]
+    for i in range(1, 6):
+        batch_file = RAW_DIR / f"data_batch_{i}"
+        X, y = load_batch(batch_file)
+        X_train_list.append(X)
+        y_train_list.append(y)
 
-    X_chunks.append(X)
-    y_chunks.append(y)
+    X_train = np.vstack(X_train_list)
+    y_train = np.hstack(y_train_list)
 
-    rows_read += len(chunk)
-    print(f"Processed {rows_read} rows")
+    print("🔹 Loading CIFAR-10 test batch...")
+    X_test, y_test = load_batch(RAW_DIR / "test_batch")
 
-    if rows_read >= MAX_ROWS:
-        break
+    print("🔹 Reshaping images...")
+    X_train = X_train.reshape(-1, 3, 32, 32).transpose(0, 2, 3, 1)
+    X_test = X_test.reshape(-1, 3, 32, 32).transpose(0, 2, 3, 1)
 
-print("Concatenating chunks...")
-X_full = pd.concat(X_chunks)
-y_full = pd.concat(y_chunks)
+    print("🔹 Normalizing pixel values...")
+    X_train = X_train.astype("float32") / 255.0
+    X_test = X_test.astype("float32") / 255.0
 
-print("Scaling features...")
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X_full)
+    print("🔹 Saving processed data...")
+    np.save(PROCESSED_DIR / "X_train.npy", X_train)
+    np.save(PROCESSED_DIR / "y_train.npy", y_train)
+    np.save(PROCESSED_DIR / "X_test.npy", X_test)
+    np.save(PROCESSED_DIR / "y_test.npy", y_test)
 
-print("Splitting train/test...")
-X_train, X_test, y_train, y_test = train_test_split(
-    X_scaled,
-    y_full,
-    test_size=0.2,
-    random_state=42,
-    stratify=y_full
-)
+    print("✅ CIFAR-10 preprocessing complete!")
+    print(f"Saved to: {PROCESSED_DIR}")
 
-print("Saving processed files...")
-pd.DataFrame(X_train).to_csv(PROCESSED_DIR / "X_train.csv", index=False)
-pd.DataFrame(X_test).to_csv(PROCESSED_DIR / "X_test.csv", index=False)
-pd.DataFrame(y_train).to_csv(PROCESSED_DIR / "y_train.csv", index=False)
-pd.DataFrame(y_test).to_csv(PROCESSED_DIR / "y_test.csv", index=False)
 
-print("✅ Preprocessing complete. Files saved in data/processed/")
+if __name__ == "__main__":
+    preprocess_cifar10()
