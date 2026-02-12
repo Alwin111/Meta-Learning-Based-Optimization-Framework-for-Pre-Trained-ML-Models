@@ -33,3 +33,13 @@ wandb/
 
 # Model checkpoints
 checkpoints/
+
+# Ignore trained models
+models/*.pkl
+models/*.onnx
+
+# Ignore results
+results/*.csv
+
+# Ignore data
+data/
