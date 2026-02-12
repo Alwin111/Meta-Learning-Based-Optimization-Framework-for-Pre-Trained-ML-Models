@@ -30,3 +30,6 @@ wandb/
 # IDE
 .vscode/
 .idea/
+
+# Model checkpoints
+checkpoints/
