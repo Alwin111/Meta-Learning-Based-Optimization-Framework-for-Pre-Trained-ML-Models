@@ -2,10 +2,13 @@ import numpy as np
 import pandas as pd
 import joblib
 import os
+import time
+
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 from models.baseline_random_forest import get_model
+
 
 # ===============================
 # CHECKPOINT 1: Load Dataset
@@ -19,6 +22,7 @@ print("Dataset Loaded")
 print("Shape of X:", X.shape)
 print("Shape of y:", y.shape)
 
+
 # ===============================
 # CHECKPOINT 2: Train-Test Split
 # ===============================
@@ -29,11 +33,13 @@ X_train, X_test, y_train, y_test = train_test_split(
 print("Train/Test split completed")
 print("Training samples:", X_train.shape[0])
 
+
 # ===============================
 # CHECKPOINT 3: Initialize Model
 # ===============================
 print("Initializing Random Forest...")
 model = get_model(n_estimators=100)
+
 
 # ===============================
 # CHECKPOINT 4: Training
@@ -41,6 +47,7 @@ model = get_model(n_estimators=100)
 print("Training started...")
 model.fit(X_train, y_train)
 print("Training completed")
+
 
 # ===============================
 # CHECKPOINT 5: Evaluation
@@ -52,10 +59,21 @@ print("Accuracy:", accuracy)
 print("\nClassification Report:\n")
 print(classification_report(y_test, y_pred))
 
+
 # ===============================
-# CHECKPOINT 6: Save Model
+# CHECKPOINT 6: Inference Timing
+# ===============================
+start = time.time()
+model.predict(X_test)
+end = time.time()
+
+print("Inference Time:", end - start, "seconds")
+
+
+# ===============================
+# CHECKPOINT 7: Save Model
 # ===============================
 os.makedirs("checkpoints", exist_ok=True)
-
 joblib.dump(model, "checkpoints/random_forest_model.pkl")
+
 print("Model saved at checkpoints/random_forest_model.pkl")
