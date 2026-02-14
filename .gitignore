@@ -43,3 +43,4 @@ results/*.csv
 
 # Ignore data
 data/
+models/
