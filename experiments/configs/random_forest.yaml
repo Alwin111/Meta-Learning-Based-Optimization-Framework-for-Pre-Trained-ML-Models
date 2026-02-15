@@ -1,0 +1,16 @@
+experiment_name: rf_baseline
+
+model:
+  name: random_forest
+  n_estimators: 100
+  max_depth: 10
+
+training:
+  batch_size: 32
+  test_size: 0.2
+  random_state: 42
+
+optimization:
+  enable_quantization: true
+  quantization_type: dynamic
+  save_suffix: "_quantized"
