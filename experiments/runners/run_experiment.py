@@ -5,159 +5,143 @@ import time
 import os
 import onnxruntime as ort
 
-from src.models.random_forest import train_random_forest
+from src.train_random_forest import train_random_forest
 from src.models.mobilenet_model import get_model, benchmark_pytorch
 from src.models.onnx_utils import (
     convert_to_onnx,
     verify_onnx,
     convert_pytorch_to_onnx
 )
-
 from src.inference.quantization import quantize_onnx_model
+from experiments.utils.result_logger import log_results
 
 
-# =====================================================
-# CONFIG LOADER
-# =====================================================
+def benchmark_onnx(model_path, input_data):
+    session = ort.InferenceSession(model_path)
 
-def load_config(config_path):
-    with open(config_path, "r") as file:
-        return yaml.safe_load(file)
-
-
-# =====================================================
-# ONNX BENCHMARK
-# =====================================================
-
-def benchmark_onnx_model(onnx_path, input_data):
-    import numpy as np
-
-    session = ort.InferenceSession(onnx_path)
     input_name = session.get_inputs()[0].name
 
-    if isinstance(input_data, np.ndarray):
-        input_data = input_data.astype(np.float32)
-
-    # Warmup
-    for _ in range(5):
-        session.run(None, {input_name: input_data})
-
-    start = time.time()
+    start = time.perf_counter()
     session.run(None, {input_name: input_data})
-    return time.time() - start
+    end = time.perf_counter()
+
+    return end - start
 
 
-# =====================================================
-# MAIN RUNNER
-# =====================================================
+def run_experiment(config_path):
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
 
-def run_experiment(config):
+    model_name = config["model_name"]
+    optimization_enabled = config["optimization"]["enabled"]
+    optimization_type = config["optimization"]["type"]
 
-    print("\nLoaded Configuration:")
-    print(config)
+    print(f"\nRunning experiment: {config['experiment_name']}")
+    print(f"Model: {model_name}")
+    print(f"Optimization: {optimization_enabled}")
 
-    model_name = config["model"]["name"]
-
-    opt_cfg = config.get("optimization", {})
-    optimization_enabled = opt_cfg.get("enable", False)
-    optimization_type = opt_cfg.get("type", "none")
-
-    # =====================================================
-    # RANDOM FOREST
-    # =====================================================
+    # -------------------------------
+    # RANDOM FOREST PIPELINE
+    # -------------------------------
     if model_name == "random_forest":
 
-        model, X_test = train_random_forest(config)
+        model, X_test, accuracy_value = train_random_forest()
 
-        print("\nExporting Random Forest to ONNX...")
-        onnx_path = convert_to_onnx(model, X_test)
-        verify_onnx(onnx_path, X_test)
+        # Save baseline ONNX
+        baseline_onnx_path = "models/random_forest_baseline.onnx"
+        convert_to_onnx(model, baseline_onnx_path)
 
-        print("\nBenchmarking Original ONNX Model...")
-        original_time = benchmark_onnx_model(onnx_path, X_test[:1])
-        print(f"Original ONNX Inference Time: {original_time*1000:.4f} ms")
+        original_time = benchmark_onnx(baseline_onnx_path, X_test.astype("float32"))
+        original_size = os.path.getsize(baseline_onnx_path) / (1024 * 1024)
 
-        # ONNX Quantization (Correct for RF)
-        if optimization_enabled and optimization_type == "quantization":
+        quantized_time = None
+        quantized_size = None
+        reduction = None
 
-            print("\nApplying ONNX Dynamic Quantization...")
+        if optimization_enabled:
+            quantized_onnx_path = "models/random_forest_quantized.onnx"
+            quantize_onnx_model(baseline_onnx_path, quantized_onnx_path)
 
-            suffix = opt_cfg.get("save_suffix", "_quantized")
-            quantized_path = onnx_path.replace(".onnx", f"{suffix}.onnx")
-
-            weight_type = opt_cfg.get("quantization", {}).get("weight_type", "qint8")
-
-            quantize_onnx_model(
-                input_model_path=onnx_path,
-                output_model_path=quantized_path,
-                weight_type_str=weight_type
+            quantized_time = benchmark_onnx(
+                quantized_onnx_path,
+                X_test.astype("float32")
             )
 
-            print("\nBenchmarking Quantized ONNX Model...")
-            quantized_time = benchmark_onnx_model(quantized_path, X_test[:1])
-            print(f"Quantized ONNX Inference Time: {quantized_time*1000:.4f} ms")
+            quantized_size = os.path.getsize(quantized_onnx_path) / (1024 * 1024)
 
-            if quantized_time > 0:
-                print(f"\n🚀 Speedup: {(original_time/quantized_time):.2f}x faster")
+            reduction = (
+                (original_size - quantized_size) / original_size * 100
+            )
 
-    # =====================================================
-    # MOBILENET V2
-    # =====================================================
+    # -------------------------------
+    # MOBILENET PIPELINE
+    # -------------------------------
     elif model_name == "mobilenet_v2":
 
-        model = get_model(num_classes=10, pretrained=False)
+        model = get_model()
         model.eval()
 
-        dummy_input = torch.randn(1, 3, 32, 32)
+        dummy_input = torch.randn(1, 3, 224, 224)
 
-        print("\nBenchmarking PyTorch Inference...")
-        pytorch_time = benchmark_pytorch(model, dummy_input)
-        print(f"PyTorch Inference Time: {pytorch_time*1000:.4f} ms")
+        baseline_onnx_path = "models/mobilenet_baseline.onnx"
+        convert_pytorch_to_onnx(model, dummy_input, baseline_onnx_path)
 
-        print("\nExporting MobileNetV2 to ONNX...")
-        onnx_path = convert_pytorch_to_onnx(
-            model,
-            dummy_input,
-            filename="mobilenet_v2.onnx"
+        original_time = benchmark_onnx(
+            baseline_onnx_path,
+            dummy_input.numpy()
         )
 
-        print("\nBenchmarking Original ONNX Model...")
-        original_time = benchmark_onnx_model(onnx_path, dummy_input.numpy())
-        print(f"Original ONNX Inference Time: {original_time*1000:.4f} ms")
+        original_size = os.path.getsize(baseline_onnx_path) / (1024 * 1024)
 
-        # 🔥 USE PYTORCH QUANTIZATION FOR CNN (Correct Approach)
-        if optimization_enabled and optimization_type == "quantization":
+        quantized_time = None
+        quantized_size = None
+        reduction = None
+        accuracy_value = "N/A"
 
-            print("\nApplying PyTorch Dynamic Quantization...")
+        if optimization_enabled:
+            quantized_onnx_path = "models/mobilenet_quantized.onnx"
+            quantize_onnx_model(baseline_onnx_path, quantized_onnx_path)
 
-            quantized_model = torch.quantization.quantize_dynamic(
-                model,
-                {torch.nn.Linear},   # Only linear layers
-                dtype=torch.qint8
+            quantized_time = benchmark_onnx(
+                quantized_onnx_path,
+                dummy_input.numpy()
             )
 
-            print("\nBenchmarking Quantized PyTorch Model...")
-            quantized_time = benchmark_pytorch(quantized_model, dummy_input)
-            print(f"Quantized PyTorch Inference Time: {quantized_time*1000:.4f} ms")
+            quantized_size = os.path.getsize(quantized_onnx_path) / (1024 * 1024)
 
-            if quantized_time > 0:
-                print(f"\n🚀 Speedup: {(pytorch_time/quantized_time):.2f}x faster")
+            reduction = (
+                (original_size - quantized_size) / original_size * 100
+            )
 
     else:
-        raise ValueError(f"Unsupported model: {model_name}")
-
-
-# =====================================================
-# ENTRY POINT
-# =====================================================
-
-if __name__ == "__main__":
-
-    if len(sys.argv) != 2:
-        print("Usage: python -m experiments.runners.run_experiment <config_path>")
+        print("Unsupported model")
         sys.exit(1)
 
-    config_path = sys.argv[1]
-    config = load_config(config_path)
+    # -------------------------------
+    # LOG RESULTS (Task 11)
+    # -------------------------------
+    result = {
+        "experiment_name": config["experiment_name"],
+        "model_name": model_name,
+        "optimization_type": optimization_type if optimization_enabled else "none",
+        "baseline_time_ms": original_time * 1000,
+        "optimized_time_ms": quantized_time * 1000 if quantized_time else None,
+        "speedup": (original_time / quantized_time) if quantized_time else None,
+        "baseline_size_mb": original_size,
+        "optimized_size_mb": quantized_size if quantized_size else None,
+        "size_reduction_percent": reduction if reduction else None,
+        "accuracy": accuracy_value
+    }
 
-    run_experiment(config)
+    log_results(result)
+
+    print("\nExperiment logged successfully.")
+    print("Results saved to experiments/results/results.csv")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3 or sys.argv[1] != "--config":
+        print("Usage: python run_experiment.py --config <config_path>")
+        sys.exit(1)
+
+    run_experiment(sys.argv[2])

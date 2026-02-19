@@ -21,15 +21,20 @@ def load_data():
     return X_train, X_test, y_train, y_test
 
 
-def main():
+def train_random_forest():
+    """
+    Train Random Forest model and return:
+    model, X_test, accuracy
+    """
+
     print("Loading CIFAR dataset...")
     X_train, X_test, y_train, y_test = load_data()
 
     print("Training SMALL Random Forest...")
 
     model = RandomForestClassifier(
-        n_estimators=50,      # smaller forest
-        max_depth=10,         # limit tree depth
+        n_estimators=50,
+        max_depth=10,
         n_jobs=-1,
         random_state=42
     )
@@ -41,10 +46,12 @@ def main():
     predictions = model.predict(X_test)
     accuracy = accuracy_score(y_test, predictions)
 
+    # Measure inference time
     infer_start = time.perf_counter()
     model.predict(X_test)
     infer_end = time.perf_counter()
 
+    # Save model
     os.makedirs("models", exist_ok=True)
     model_path = "models/random_forest_baseline.pkl"
     joblib.dump(model, model_path)
@@ -55,8 +62,9 @@ def main():
     print(f"Training Time: {(train_end - train_start):.6f} seconds")
     print(f"Inference Time: {(infer_end - infer_start):.6f} seconds")
     print(f"Model Size: {os.path.getsize(model_path)/(1024*1024):.2f} MB")
-    print(f"Model saved at {model_path}")
+
+    return model, X_test, accuracy
 
 
 if __name__ == "__main__":
-    main()
+    train_random_forest()

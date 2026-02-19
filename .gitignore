@@ -45,3 +45,5 @@ results/*.csv
 # Ignore data
 data/
 models/
+
+experiments/results/

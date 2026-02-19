@@ -1,0 +1,7 @@
+experiment_name: rf_experiment
+
+model_name: random_forest
+
+optimization:
+  enabled: true
+  type: quantization
