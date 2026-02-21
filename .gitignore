@@ -57,3 +57,8 @@ results/plots/
 # Optional: Keep experiment CSV
 # ------------------------------
 # (Do NOT ignore experiments/results/results.csv)
+# Ignore datasets
+data/
+*.tar.gz
+*.zip
+*.~lock.*
