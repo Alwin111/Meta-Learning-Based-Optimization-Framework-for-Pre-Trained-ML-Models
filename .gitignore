@@ -1,49 +1,59 @@
-
-# Data (keep docs, ignore large files)
+# ------------------------------
+# Data (ignore heavy data only)
+# ------------------------------
 data/raw/
 data/processed/
 
+# ------------------------------
 # Python
+# ------------------------------
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
+# ------------------------------
 # Virtual environments
+# ------------------------------
 venv/
 .env/
 .env*/
 
-# PyTorch / ML
+# ------------------------------
+# ML Model Files (large artifacts)
+# ------------------------------
 *.pt
 *.pth
 *.ckpt
 *.onnx
+*.data
 
+checkpoints/
+
+# ------------------------------
 # Jupyter
+# ------------------------------
 .ipynb_checkpoints/
 
+# ------------------------------
 # Logs & caches
+# ------------------------------
 logs/
 wandb/
 .cache/
 
+# ------------------------------
 # IDE
+# ------------------------------
 .vscode/
 .idea/
 
-# Model checkpoints
-checkpoints/
+# ------------------------------
+# Generated Plots
+# ------------------------------
+results/plots/
 
-# Ignore trained models
-models/*.pkl
-models/*.onnx
-
-# Ignore results
-results/*.csv
-
-# Ignore data
-data/
-models/
-
-experiments/results/
+# ------------------------------
+# Optional: Keep experiment CSV
+# ------------------------------
+# (Do NOT ignore experiments/results/results.csv)

@@ -1,0 +1,5 @@
+experiment_name,model_name,optimization_type,baseline_time_ms,optimized_time_ms,speedup,baseline_size_mb,optimized_size_mb,size_reduction_percent,accuracy
+mobilenet_experiment,mobilenet_v2,none,4.177289999915956,,,0.26951026916503906,,,N/A
+mobilenet_experiment,mobilenet_v2,none,4.160167999998521,,,0.26951026916503906,,,N/A
+mobilenet_experiment,mobilenet_v2,quantization,4.1195399999196525,227.37640800005465,0.01811771078694612,0.26951026916503906,8.730259895324707,-3139.3051004593035,N/A
+random_forest_experiment,random_forest,quantization,49.95834100009233,48.544271999617195,1.029129471763142,7.755155563354492,7.755245208740234,-0.0011559456803908572,0.4283

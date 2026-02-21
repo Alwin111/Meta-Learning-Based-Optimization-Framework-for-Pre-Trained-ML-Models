@@ -1,7 +1,6 @@
 experiment_name: mobilenet_experiment
 
-model:
-  name: mobilenet_v2
+model_name: mobilenet_v2
 
 training:
   batch_size: 1
@@ -9,7 +8,7 @@ training:
   random_state: 42
 
 optimization:
-  enable: true
+  enabled: true
   type: quantization
   backend: onnx
   quantization:

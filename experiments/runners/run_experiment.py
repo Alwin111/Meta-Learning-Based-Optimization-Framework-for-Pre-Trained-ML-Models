@@ -6,19 +6,24 @@ import os
 import onnxruntime as ort
 
 from src.train_random_forest import train_random_forest
-from src.models.mobilenet_model import get_model, benchmark_pytorch
+from src.models.mobilenet_model import get_model
 from src.models.onnx_utils import (
     convert_to_onnx,
-    verify_onnx,
     convert_pytorch_to_onnx
 )
 from src.inference.quantization import quantize_onnx_model
 from experiments.utils.result_logger import log_results
 
 
+# ----------------------------------------
+# GLOBAL MODEL DIRECTORY
+# ----------------------------------------
+MODEL_DIR = "checkpoints/models"
+os.makedirs(MODEL_DIR, exist_ok=True)
+
+
 def benchmark_onnx(model_path, input_data):
     session = ort.InferenceSession(model_path)
-
     input_name = session.get_inputs()[0].name
 
     start = time.perf_counter()
@@ -40,18 +45,21 @@ def run_experiment(config_path):
     print(f"Model: {model_name}")
     print(f"Optimization: {optimization_enabled}")
 
-    # -------------------------------
-    # RANDOM FOREST PIPELINE
-    # -------------------------------
+    # ======================================================
+    # RANDOM FOREST PIPELINE (ONNX + Quantization)
+    # ======================================================
     if model_name == "random_forest":
 
         model, X_test, accuracy_value = train_random_forest()
 
-        # Save baseline ONNX
-        baseline_onnx_path = "models/random_forest_baseline.onnx"
+        baseline_onnx_path = f"{MODEL_DIR}/random_forest_baseline.onnx"
         convert_to_onnx(model, baseline_onnx_path)
 
-        original_time = benchmark_onnx(baseline_onnx_path, X_test.astype("float32"))
+        original_time = benchmark_onnx(
+            baseline_onnx_path,
+            X_test.astype("float32")
+        )
+
         original_size = os.path.getsize(baseline_onnx_path) / (1024 * 1024)
 
         quantized_time = None
@@ -59,7 +67,7 @@ def run_experiment(config_path):
         reduction = None
 
         if optimization_enabled:
-            quantized_onnx_path = "models/random_forest_quantized.onnx"
+            quantized_onnx_path = f"{MODEL_DIR}/random_forest_quantized.onnx"
             quantize_onnx_model(baseline_onnx_path, quantized_onnx_path)
 
             quantized_time = benchmark_onnx(
@@ -73,9 +81,9 @@ def run_experiment(config_path):
                 (original_size - quantized_size) / original_size * 100
             )
 
-    # -------------------------------
-    # MOBILENET PIPELINE
-    # -------------------------------
+    # ======================================================
+    # MOBILENET PIPELINE (PyTorch Dynamic Quantization)
+    # ======================================================
     elif model_name == "mobilenet_v2":
 
         model = get_model()
@@ -83,7 +91,8 @@ def run_experiment(config_path):
 
         dummy_input = torch.randn(1, 3, 224, 224)
 
-        baseline_onnx_path = "models/mobilenet_baseline.onnx"
+        # -------- Baseline ONNX Benchmark --------
+        baseline_onnx_path = f"{MODEL_DIR}/mobilenet_v2_baseline.onnx"
         convert_pytorch_to_onnx(model, dummy_input, baseline_onnx_path)
 
         original_time = benchmark_onnx(
@@ -98,16 +107,29 @@ def run_experiment(config_path):
         reduction = None
         accuracy_value = "N/A"
 
+        # -------- PyTorch Dynamic Quantization --------
         if optimization_enabled:
-            quantized_onnx_path = "models/mobilenet_quantized.onnx"
-            quantize_onnx_model(baseline_onnx_path, quantized_onnx_path)
 
-            quantized_time = benchmark_onnx(
-                quantized_onnx_path,
-                dummy_input.numpy()
+            print("\n🔄 Applying PyTorch Dynamic Quantization...")
+
+            quantized_model = torch.quantization.quantize_dynamic(
+                model,
+                {torch.nn.Linear},
+                dtype=torch.qint8
             )
 
-            quantized_size = os.path.getsize(quantized_onnx_path) / (1024 * 1024)
+            # Benchmark quantized PyTorch model
+            start = time.perf_counter()
+            quantized_model(dummy_input)
+            end = time.perf_counter()
+
+            quantized_time = end - start
+
+            # Save quantized model
+            quantized_path = f"{MODEL_DIR}/mobilenet_v2_quantized.pth"
+            torch.save(quantized_model.state_dict(), quantized_path)
+
+            quantized_size = os.path.getsize(quantized_path) / (1024 * 1024)
 
             reduction = (
                 (original_size - quantized_size) / original_size * 100
@@ -117,9 +139,9 @@ def run_experiment(config_path):
         print("Unsupported model")
         sys.exit(1)
 
-    # -------------------------------
-    # LOG RESULTS (Task 11)
-    # -------------------------------
+    # ======================================================
+    # LOG RESULTS
+    # ======================================================
     result = {
         "experiment_name": config["experiment_name"],
         "model_name": model_name,
@@ -141,7 +163,7 @@ def run_experiment(config_path):
 
 if __name__ == "__main__":
     if len(sys.argv) < 3 or sys.argv[1] != "--config":
-        print("Usage: python run_experiment.py --config <config_path>")
+        print("Usage: python -m experiments.runners.run_experiment --config <config_path>")
         sys.exit(1)
 
     run_experiment(sys.argv[2])
