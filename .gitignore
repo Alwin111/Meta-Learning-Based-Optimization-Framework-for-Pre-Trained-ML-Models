@@ -62,3 +62,24 @@ data/
 *.tar.gz
 *.zip
 *.~lock.*
+
+
+# Data
+data/
+*.npy
+
+
+
+# Results
+results/
+experiments/
+
+
+# OS files
+.DS_Store
+
+# Models
+models/
+*.pth
+*.pkl
+

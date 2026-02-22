@@ -11,26 +11,16 @@ from src.models.mobilenet_model import get_model
 DATA_PATH = "data/processed/cifar10"
 
 
-# -----------------------------
-# Load Data
-# -----------------------------
 def load_data(model_name):
     X_test = np.load(os.path.join(DATA_PATH, "X_test.npy"))
     y_test = np.load(os.path.join(DATA_PATH, "y_test.npy"))
 
     if model_name == "random_forest":
-        # Flatten CIFAR images (32x32x3 → 3072)
         X_test = X_test.reshape(X_test.shape[0], -1)
-
-    if model_name == "mobilenet":
-        X_test = X_test.astype(np.float32)
 
     return X_test, y_test
 
 
-# -----------------------------
-# Sklearn Inference Timing
-# -----------------------------
 def measure_inference_time_sklearn(model, X, runs=10):
     total_time = 0.0
     for _ in range(runs):
@@ -41,29 +31,24 @@ def measure_inference_time_sklearn(model, X, runs=10):
     return total_time / runs
 
 
-# -----------------------------
-# MobileNet Inference Timing
-# -----------------------------
-def measure_inference_time_mobilenet(model, X):
+def measure_inference_time_mobilenet(model, X_tensor):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
     total_time = 0.0
 
     with torch.no_grad():
-        for i in range(X.shape[0]):
-            sample = torch.tensor(X[i:i+1]).to(device)
+        for i in range(X_tensor.shape[0]):
+            sample = X_tensor[i:i+1]
             start = time.perf_counter()
             model(sample)
             end = time.perf_counter()
             total_time += (end - start)
 
-    return total_time / X.shape[0]
+    return total_time / X_tensor.shape[0]
 
 
-# -----------------------------
-# Main Benchmark
-# -----------------------------
 def main(model_name):
+
     print("Loading model...")
 
     if model_name == "random_forest":
@@ -71,10 +56,11 @@ def main(model_name):
         model = joblib.load(model_path)
 
     elif model_name == "mobilenet":
-        model_path = "models/mobilenet.pth"   # ✅ FIXED PATH
+        model_path = "models/mobilenet.pth"
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = get_model(num_classes=10, pretrained=False).to(device)
         model.load_state_dict(torch.load(model_path, map_location=device))
+        model.eval()
 
     else:
         raise ValueError("Unsupported model")
@@ -87,14 +73,18 @@ def main(model_name):
     if model_name == "random_forest":
         predictions = model.predict(X_test)
 
-    else:
+    elif model_name == "mobilenet":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.eval()
+
+        # Convert HWC → CHW
+        X_test = np.transpose(X_test, (0, 3, 1, 2))
+        X_test_tensor = torch.tensor(X_test, dtype=torch.float32).to(device)
+
         predictions = []
 
         with torch.no_grad():
-            for i in range(X_test.shape[0]):
-                sample = torch.tensor(X_test[i:i+1]).to(device)
+            for i in range(X_test_tensor.shape[0]):
+                sample = X_test_tensor[i:i+1]
                 output = model(sample)
                 pred = torch.argmax(output, dim=1).cpu().numpy()
                 predictions.append(pred[0])
@@ -107,8 +97,9 @@ def main(model_name):
 
     if model_name == "random_forest":
         avg_inference_time = measure_inference_time_sklearn(model, X_test)
-    else:
-        avg_inference_time = measure_inference_time_mobilenet(model, X_test)
+
+    elif model_name == "mobilenet":
+        avg_inference_time = measure_inference_time_mobilenet(model, X_test_tensor)
 
     model_size_mb = os.path.getsize(model_path) / (1024 * 1024)
 
@@ -118,7 +109,6 @@ def main(model_name):
     print(f"Average Inference Time: {avg_inference_time:.6f} seconds")
     print(f"Model Size: {model_size_mb:.2f} MB")
 
-    # Save Results
     os.makedirs("results", exist_ok=True)
     results_path = "results/baseline_metrics.csv"
 
@@ -138,6 +128,17 @@ def main(model_name):
     df.to_csv(results_path, index=False)
 
     print("\nResults saved to results/baseline_metrics.csv")
+
+    return {
+        "model": f"{model_name}_baseline",
+        "accuracy": float(accuracy),
+        "avg_inference_time_sec": float(avg_inference_time),
+        "model_size_mb": float(model_size_mb)
+    }
+
+
+def benchmark_model(model_name: str):
+    return main(model_name)
 
 
 if __name__ == "__main__":
