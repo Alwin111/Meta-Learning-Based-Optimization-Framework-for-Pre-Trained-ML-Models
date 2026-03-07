@@ -1,11 +1,14 @@
 import time
-import numpy as np
 
-def benchmark_model(session, input_data, runs=50):
+def benchmark_model(session, input_data, runs=10, warmup=3):
 
     input_name = session.get_inputs()[0].name
 
-    times = []
+    # warmup runs
+    for _ in range(warmup):
+        session.run(None, {input_name: input_data})
+
+    latencies = []
 
     for _ in range(runs):
 
@@ -15,8 +18,6 @@ def benchmark_model(session, input_data, runs=50):
 
         end = time.time()
 
-        times.append(end - start)
+        latencies.append(end - start)
 
-    avg_latency = np.mean(times)
-
-    return avg_latency
+    return sum(latencies) / len(latencies)
