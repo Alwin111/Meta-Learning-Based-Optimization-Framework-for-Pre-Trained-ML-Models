@@ -1,4 +1,11 @@
-from src.experiments.run_experiment import run_experiment
-from config.config import MODEL_PATH, DATASET_PATH
+import sys
+from run_experiment import main
+from src.meta_learning.optimization_selector import recommend_optimization
 
-run_experiment(MODEL_PATH, DATASET_PATH, "mobilenet")
+recommended = recommend_optimization("mobilenet")
+print("Recommended model configuration:", recommended)
+
+# pass config file to run_experiment
+sys.argv = ["run_experiment.py", "configs/random_forest.yaml"]
+
+main()
