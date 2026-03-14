@@ -5,9 +5,11 @@ from sklearn.datasets import load_iris
 
 import os
 import joblib
+import time
 
 
 def train_random_forest(config):
+
     print("Training Random Forest from config...")
 
     data = load_iris()
@@ -32,13 +34,29 @@ def train_random_forest(config):
 
     model.fit(X_train, y_train)
 
+    # Accuracy
     predictions = model.predict(X_test)
     accuracy = accuracy_score(y_test, predictions)
 
     print(f"Sklearn Accuracy: {accuracy:.4f}")
 
+    # Inference latency measurement
+    start = time.time()
+    model.predict(X_test)
+    end = time.time()
+
+    latency = (end - start) / len(X_test)
+
     # Save model
     os.makedirs("checkpoints", exist_ok=True)
-    joblib.dump(model, "checkpoints/random_forest.pkl")
+    model_path = "checkpoints/random_forest.pkl"
+    joblib.dump(model, model_path)
 
-    return model, X_test
+    # Model size
+    model_size = os.path.getsize(model_path) / (1024 * 1024)
+
+    return {
+        "accuracy": accuracy,
+        "avg_inference_time_sec": latency,
+        "model_size_mb": model_size
+    }
