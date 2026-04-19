@@ -10,3 +10,7 @@ backup/**/*.pkl
 *.zip
 *.tar
 *.gz
+*.pkl
+*.pt
+*.pth
+models/
