@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+
+backup/data/
+backup/**/*.npy
+backup/**/*.pt
+backup/**/*.pkl
+
+*.zip
+*.tar
+*.gz
