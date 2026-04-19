@@ -21,3 +21,8 @@ backup/
 *.pth
 *.pkl
 __pycache__/
+backup/
+venv/
+__pycache__/
+*.onnx
+*.pth
