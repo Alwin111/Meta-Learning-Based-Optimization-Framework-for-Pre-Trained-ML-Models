@@ -14,3 +14,10 @@ backup/**/*.pkl
 *.pt
 *.pth
 models/
+
+venv/
+backup/
+*.onnx
+*.pth
+*.pkl
+__pycache__/
