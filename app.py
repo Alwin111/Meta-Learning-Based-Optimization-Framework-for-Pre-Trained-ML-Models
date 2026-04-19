@@ -10,53 +10,40 @@ import pandas as pd
 import joblib
 import streamlit as st
 import matplotlib.pyplot as plt
-import numpy as np
-import random
 import os
 
-# 🔒 Global seed
-np.random.seed(42)
-random.seed(42)
-
-# 🤖 Load meta-model
-meta_model = None
-try:
-    meta_model = joblib.load("meta_model.pkl")
-except:
-    meta_model = None
-
+# =========================
+# PAGE CONFIG
+# =========================
 st.set_page_config(page_title="Meta-Learning Framework", layout="centered")
 
 st.title("🚀 Meta-Learning Optimization Framework")
 st.markdown("Upload a model and dataset to analyze performance and optimization.")
 
-# Uploads
+# =========================
+# FILE UPLOAD
+# =========================
 model_file = st.file_uploader("📦 Upload Model (.pkl)", type=["pkl"])
 data_file = st.file_uploader("📊 Upload Dataset (.csv)", type=["csv"])
 
-# Optimization selection
+# =========================
+# OPTIMIZATION SELECTION
+# =========================
 st.subheader("⚙️ Optimization Selection")
 
 run_all = st.checkbox("🚀 Run All Optimizations", value=True)
 
 if not run_all:
-    optimization = st.selectbox(
-        "Select Single Optimization",
-        ["baseline", "quantization", "pruning", "distillation"]
+    selected_method = st.selectbox(
+        "Select Optimization",
+        ["Baseline", "Quantization", "Pruning", "Distillation"]
     )
 else:
-    optimization = "run_all"
+    selected_method = "ALL"
 
-st.info("Run all optimizations to compare and automatically select the best one.")
-
-# Deterministic mode
-deterministic = st.checkbox("🔒 Deterministic Mode (Stable Results)", value=True)
-
-if deterministic:
-    np.random.seed(42)
-    random.seed(42)
-
-# Sliders
+# =========================
+# PRIORITY SLIDERS
+# =========================
 st.subheader("🎯 Set Optimization Priorities")
 
 w_latency = st.slider("Latency Importance", 0.0, 1.0, 0.4)
@@ -64,12 +51,14 @@ w_accuracy = st.slider("Accuracy Importance", 0.0, 1.0, 0.3)
 w_size = st.slider("Model Size Importance", 0.0, 1.0, 0.2)
 w_throughput = st.slider("Throughput Importance", 0.0, 1.0, 0.1)
 
-# Run
+# =========================
+# RUN BUTTON
+# =========================
 if st.button("▶️ Run Optimization"):
 
-    if model_file and data_file:
+    if model_file is not None and data_file is not None:
 
-        with st.spinner("Running optimization pipeline..."):
+        with st.spinner("Running optimization..."):
 
             model = joblib.load(model_file)
             data = pd.read_csv(data_file)
@@ -78,62 +67,46 @@ if st.button("▶️ Run Optimization"):
             y = data.iloc[:, -1]
 
             results_list = []
+            model_map = {}
 
-            # BASELINE
-            if run_all or optimization == "baseline":
-                preds, lat, thr, size = evaluate_model(model, X, y)
+            def run_method(name, model_obj):
+                preds, latency, throughput, size = evaluate_model(model_obj, X, y)
+
                 results_list.append({
-                    "Method": "Baseline",
-                    "Latency": lat,
+                    "Method": name,
+                    "Latency": latency,
                     "Accuracy": accuracy_score(y, preds),
                     "Size (MB)": size,
-                    "Throughput": thr,
-                    "Model": model
+                    "Throughput": throughput
                 })
 
-            # QUANTIZATION
-            if run_all or optimization == "quantization":
-                qm = simulate_quantization(model)
-                preds, lat, thr, size = evaluate_model(qm, X, y)
-                results_list.append({
-                    "Method": "Quantization",
-                    "Latency": lat,
-                    "Accuracy": accuracy_score(y, preds),
-                    "Size (MB)": size,
-                    "Throughput": thr,
-                    "Model": qm
-                })
+                model_map[name] = model_obj
 
-            # PRUNING
-            if run_all or optimization == "pruning":
-                pm = simulate_pruning(model)
-                preds, lat, thr, size = evaluate_model(pm, X, y)
-                results_list.append({
-                    "Method": "Pruning",
-                    "Latency": lat,
-                    "Accuracy": accuracy_score(y, preds),
-                    "Size (MB)": size,
-                    "Throughput": thr,
-                    "Model": pm
-                })
+            # =========================
+            # RUN METHODS
+            # =========================
+            if run_all or selected_method == "Baseline":
+                run_method("Baseline", model)
 
-            # DISTILLATION (NEW)
-            if run_all or optimization == "distillation":
-                dm = simulate_distillation(model)
-                preds, lat, thr, size = evaluate_model(dm, X, y)
-                results_list.append({
-                    "Method": "Distillation",
-                    "Latency": lat,
-                    "Accuracy": accuracy_score(y, preds) * 0.98,  # slight drop
-                    "Size (MB)": size,
-                    "Throughput": thr,
-                    "Model": dm
-                })
+            if run_all or selected_method == "Quantization":
+                quant_model = simulate_quantization(joblib.load(model_file))
+                run_method("Quantization", quant_model)
+
+            if run_all or selected_method == "Pruning":
+                prune_model = simulate_pruning(joblib.load(model_file))
+                run_method("Pruning", prune_model)
+
+            if run_all or selected_method == "Distillation":
+                distill_model = simulate_distillation(joblib.load(model_file), X)
+                run_method("Distillation", distill_model)
 
             results = pd.DataFrame(results_list)
 
-            # Normalize weights
+            # =========================
+            # NORMALIZE WEIGHTS
+            # =========================
             total = w_latency + w_accuracy + w_size + w_throughput
+
             if total == 0:
                 w_latency_n, w_accuracy_n, w_size_n, w_throughput_n = 0.4, 0.3, 0.2, 0.1
             else:
@@ -142,83 +115,135 @@ if st.button("▶️ Run Optimization"):
                 w_size_n = w_size / total
                 w_throughput_n = w_throughput / total
 
-            # Normalize metrics
-            norm = results.copy()
-            for col in ["Latency", "Accuracy", "Size (MB)", "Throughput"]:
-                if norm[col].max() != norm[col].min():
-                    norm[col] = (norm[col] - norm[col].min()) / (norm[col].max() - norm[col].min())
-
-            # Score (fallback)
+            # =========================
+            # SCORING
+            # =========================
             results["Score"] = (
-                (1 - norm["Latency"]) * w_latency_n +
-                norm["Accuracy"] * w_accuracy_n +
-                (1 - norm["Size (MB)"]) * w_size_n +
-                norm["Throughput"] * w_throughput_n
+                (1 / results["Latency"]) * w_latency_n +
+                results["Accuracy"] * w_accuracy_n +
+                (1 / results["Size (MB)"]) * w_size_n +
+                results["Throughput"] * w_throughput_n
             )
 
-            # 🤖 META MODEL
-            if meta_model is not None:
-                try:
-                    X_meta = results[[
-                        "Latency", "Accuracy", "Size (MB)", "Throughput"
-                    ]]
+            best_method = results.loc[results["Score"].idxmax()]["Method"]
 
-                    preds_meta = meta_model.predict(X_meta)
-                    results["Meta_Pred"] = preds_meta
+            # =========================
+            # META MODEL (FIXED)
+            # =========================
+            meta_prediction = None
 
-                    best_row = results.loc[results["Meta_Pred"].idxmax()]
-                    st.info("🤖 Using Meta-Learning Model")
+            if os.path.exists("meta_model.pkl"):
 
-                except Exception as e:
-                    st.warning(f"Meta-model failed: {e}")
-                    best_row = results.loc[results["Score"].idxmax()]
+                if len(results) < 2:
+                    meta_prediction = "⚠️ Meta-model requires multiple methods to compare"
+                else:
+                    meta_model = joblib.load("meta_model.pkl")
+
+                    try:
+                        required_features = list(meta_model.feature_names_in_)
+                        avg_row = results.mean(numeric_only=True).to_frame().T
+
+                        # Add missing features dynamically
+                        for col in required_features:
+                            if col not in avg_row.columns:
+                                if col == "Dataset_Size":
+                                    avg_row[col] = len(X)
+                                elif col == "Num_Features":
+                                    avg_row[col] = X.shape[1]
+                                else:
+                                    avg_row[col] = 0
+
+                        avg_features = avg_row[required_features]
+
+                        meta_prediction = meta_model.predict(avg_features)[0]
+
+                    except Exception as e:
+                        meta_prediction = f"Error: {str(e)}"
+
+            # =========================
+            # EXPLANATION
+            # =========================
+            best_row = results.iloc[results["Score"].idxmax()]
+
+            if len(results) == 1:
+                explanation = f"""
+                **{best_method} was selected because it was the only method executed.**
+
+                Metrics:
+                - Latency: {round(best_row['Latency'], 5)}
+                - Accuracy: {round(best_row['Accuracy'], 4)}
+                - Size: {round(best_row['Size (MB)'], 4)} MB
+                - Throughput: {round(best_row['Throughput'], 2)}
+
+                👉 Run multiple optimizations for better comparison.
+                """
             else:
-                best_row = results.loc[results["Score"].idxmax()]
-                st.info("⚠️ Using scoring system")
+                explanation = f"""
+                **{best_method} was selected because:**
 
-            best_method = best_row["Method"]
-            best_model = best_row["Model"]
+                - It achieved the highest score: {round(best_row['Score'], 4)}
+                - Latency: {round(best_row['Latency'], 5)}
+                - Accuracy: {round(best_row['Accuracy'], 4)}
+                - Size: {round(best_row['Size (MB)'], 4)} MB
+                - Throughput: {round(best_row['Throughput'], 2)}
 
-            # Save dataset
-            os.makedirs("experiments", exist_ok=True)
+                Based on your priorities:
+                - Latency weight: {round(w_latency_n, 2)}
+                - Accuracy weight: {round(w_accuracy_n, 2)}
+                - Size weight: {round(w_size_n, 2)}
+                - Throughput weight: {round(w_throughput_n, 2)}
 
-            meta_data = results.drop(columns=["Model"]).copy()
-            meta_data["Best"] = (meta_data["Method"] == best_method).astype(int)
+                👉 The system selected the best trade-off across all metrics.
+                """
 
-            # Extra features
-            meta_data["Dataset_Size"] = len(X)
-            meta_data["Num_Features"] = X.shape[1]
+        # =========================
+        # OUTPUT
+        # =========================
+        st.success("✅ Optimization Complete!")
 
-            meta_data.to_csv(
-                "experiments/meta_dataset.csv",
-                mode="a",
-                header=not os.path.exists("experiments/meta_dataset.csv"),
-                index=False
-            )
-
-        # OUTPUT UI
-        st.success("✅ Run Complete!")
-
-        st.subheader("📊 Results")
-        st.dataframe(results.drop(columns=["Model"]))
-
-        if "Meta_Pred" in results.columns:
-            st.subheader("🤖 Meta Predictions")
-            st.dataframe(results[["Method", "Meta_Pred"]])
+        st.subheader("📊 Full Comparison")
+        st.dataframe(results)
 
         st.subheader("🏆 Best Optimization")
         st.success(best_method)
 
-        # Graph
-        st.subheader("📈 Comparison")
+        if meta_prediction is not None:
+            st.subheader("🧠 Meta-Model Prediction")
+            st.info(meta_prediction)
+
+        st.subheader("📌 Why This Method Was Chosen")
+        st.markdown(explanation)
+
+        st.subheader("⚖️ Final Weights Used")
+        st.write({
+            "Latency": round(w_latency_n, 2),
+            "Accuracy": round(w_accuracy_n, 2),
+            "Size": round(w_size_n, 2),
+            "Throughput": round(w_throughput_n, 2)
+        })
+
+        # =========================
+        # GRAPH
+        # =========================
+        st.subheader("📈 Multi-Metric Comparison")
+
         fig, ax = plt.subplots()
         results.set_index("Method")[["Latency", "Accuracy", "Size (MB)"]].plot(kind="bar", ax=ax)
         st.pyplot(fig)
 
-        # Download
+        # =========================
+        # DOWNLOAD
+        # =========================
+        best_model = model_map[best_method]
+
         joblib.dump(best_model, "optimized_model.pkl")
+
         with open("optimized_model.pkl", "rb") as f:
-            st.download_button("📥 Download Model", f)
+            st.download_button(
+                "📥 Download Optimized Model",
+                f,
+                file_name="optimized_model.pkl"
+            )
 
     else:
-        st.error("❌ Upload both model and dataset")
+        st.error("❌ Please upload both model and dataset.")

@@ -2,87 +2,86 @@ import os
 import joblib
 import time
 import numpy as np
-import random
 
-# 🔒 Global seed for reproducibility
-np.random.seed(42)
-random.seed(42)
-
-
-# 📦 Get model size (more realistic)
+# =========================
+# MODEL SIZE
+# =========================
 def get_model_size(model, filename="temp_model.pkl"):
     joblib.dump(model, filename)
-    size = os.path.getsize(filename) / (1024 * 1024)  # MB
-
-    # Cleanup temp file
+    size = os.path.getsize(filename) / (1024 * 1024)
     try:
         os.remove(filename)
     except:
         pass
-
     return size
 
 
-# ⚙️ Simulate Quantization
+# =========================
+# MODEL TYPE DETECTION
+# =========================
+def detect_model_type(model):
+    import sklearn.base
+    if isinstance(model, sklearn.base.BaseEstimator):
+        return "sklearn"
+    else:
+        return "unknown"
+
+
+# =========================
+# REAL QUANTIZATION (SKLEARN)
+# =========================
 def simulate_quantization(model):
     """
-    Simulate quantization:
-    - Strong size reduction
-    - Good latency improvement
-    - No accuracy change (handled in app if needed)
+    Convert float64 → float32 to reduce size
     """
-    np.random.seed(42)
+    for attr in dir(model):
+        val = getattr(model, attr)
+        if isinstance(val, np.ndarray):
+            try:
+                setattr(model, attr, val.astype(np.float32))
+            except:
+                pass
+    return model
 
-    quant_model = model
-    quant_model._size_factor = 0.5
-    quant_model._latency_factor = 0.8
 
-    return quant_model
-
-
-# ✂️ Simulate Pruning
-def simulate_pruning(model):
+# =========================
+# REAL PRUNING (SKLEARN)
+# =========================
+def simulate_pruning(model, threshold=1e-3):
     """
-    Simulate pruning:
-    - Moderate size reduction
-    - Moderate latency improvement
+    Remove small weights
     """
-    np.random.seed(42)
+    for attr in dir(model):
+        val = getattr(model, attr)
+        if isinstance(val, np.ndarray):
+            try:
+                pruned = np.where(np.abs(val) < threshold, 0, val)
+                setattr(model, attr, pruned)
+            except:
+                pass
+    return model
 
-    prune_model = model
-    prune_model._size_factor = 0.7
-    prune_model._latency_factor = 0.85
 
-    return prune_model
-
-
-# 🧠 NEW: Simulate Distillation
-def simulate_distillation(model):
+# =========================
+# DISTILLATION (OPTIONAL)
+# =========================
+def simulate_distillation(model, X):
     """
-    Simulate knowledge distillation:
-    - Moderate size reduction
-    - Strong latency improvement
-    - Slight accuracy drop (handled in app)
+    Train smaller student model
     """
-    np.random.seed(42)
+    from sklearn.tree import DecisionTreeClassifier
 
-    distilled_model = model
-    distilled_model._size_factor = 0.6
-    distilled_model._latency_factor = 0.75
+    student = DecisionTreeClassifier(max_depth=5)
+    student.fit(X, model.predict(X))
 
-    return distilled_model
+    return student
 
 
-# 📊 Evaluate Model (STABLE VERSION)
+# =========================
+# EVALUATION
+# =========================
 def evaluate_model(model, X, y, runs=5):
-    """
-    Stable evaluation:
-    - Averages latency over multiple runs
-    - Applies optimization simulation factors
-    """
-
     times = []
-    preds = None
 
     for _ in range(runs):
         start = time.time()
@@ -90,19 +89,8 @@ def evaluate_model(model, X, y, runs=5):
         end = time.time()
         times.append(end - start)
 
-    # ✅ Average latency (stable)
     latency = sum(times) / len(times)
-
-    # ✅ Apply latency factor
-    latency_factor = getattr(model, "_latency_factor", 1.0)
-    latency *= latency_factor
-
-    # ✅ Throughput
     throughput = len(X) / latency
-
-    # ✅ Size
     size = get_model_size(model)
-    size_factor = getattr(model, "_size_factor", 1.0)
-    size *= size_factor
 
     return preds, latency, throughput, size
