@@ -1,28 +1,23 @@
+# 🔴 Ignore backup (VERY IMPORTANT)
+backup/
+
+# 🔴 Ignore virtual environment
 venv/
+
+# 🔴 Python cache
 __pycache__/
 *.pyc
 
-backup/data/
-backup/**/*.npy
-backup/**/*.pt
-backup/**/*.pkl
-
-*.zip
-*.tar
-*.gz
-*.pkl
+# 🔴 Large ML model files
+*.onnx
+*.pth
+*.h5
 *.pt
-*.pth
-models/
 
-venv/
-backup/
-*.onnx
-*.pth
-*.pkl
-__pycache__/
-backup/
-venv/
-__pycache__/
-*.onnx
-*.pth
+# 🔴 Temporary / logs
+*.log
+
+# 🔴 System files
+.DS_Store
+
+# 🔴 Jupyter
