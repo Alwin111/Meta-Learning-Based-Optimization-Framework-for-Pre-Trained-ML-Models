@@ -5,16 +5,14 @@ from utils.optimizer import (
     simulate_distillation
 )
 
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, classification_report
 import pandas as pd
 import joblib
 import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
+import copy
 
-# =========================
-# UI
-# =========================
 st.set_page_config(page_title="Meta-Learning Framework", layout="centered")
 
 st.title("🚀 Meta-Learning Optimization Framework")
@@ -23,9 +21,6 @@ st.markdown("Upload a model and dataset to analyze performance and optimization.
 model_file = st.file_uploader("📦 Upload Model (.pkl)", type=["pkl"])
 data_file = st.file_uploader("📊 Upload Dataset (.csv)", type=["csv"])
 
-# =========================
-# Optimization Selection
-# =========================
 st.subheader("⚙️ Optimization Selection")
 
 run_all = st.checkbox("🚀 Run All Optimizations", value=True)
@@ -38,9 +33,6 @@ if not run_all:
 else:
     selected_method = "ALL"
 
-# =========================
-# Weights
-# =========================
 st.subheader("🎯 Set Optimization Priorities")
 
 w_latency = st.slider("Latency Importance", 0.0, 1.0, 0.4)
@@ -48,9 +40,6 @@ w_accuracy = st.slider("Accuracy Importance", 0.0, 1.0, 0.3)
 w_size = st.slider("Model Size Importance", 0.0, 1.0, 0.2)
 w_throughput = st.slider("Throughput Importance", 0.0, 1.0, 0.1)
 
-# =========================
-# RUN
-# =========================
 if st.button("▶️ Run Optimization"):
 
     if model_file and data_file:
@@ -61,11 +50,17 @@ if st.button("▶️ Run Optimization"):
         X = data.iloc[:, :-1]
         y = data.iloc[:, -1]
 
-        # Keep DataFrame to avoid sklearn warnings
         X_input = X.fillna(0)
 
         results_list = []
         model_map = {}
+        predictions_map = {}
+
+        def safe_pruning(model):
+            m = copy.deepcopy(model)
+            if hasattr(m, "n_estimators"):
+                m.n_estimators = max(10, m.n_estimators // 2)
+            return m
 
         def run_method(name, model_obj):
             preds, latency, throughput, size = evaluate_model(model_obj, X_input, y)
@@ -79,10 +74,8 @@ if st.button("▶️ Run Optimization"):
             })
 
             model_map[name] = model_obj
+            predictions_map[name] = preds
 
-        # =========================
-        # Run Methods
-        # =========================
         if run_all or selected_method == "Baseline":
             run_method("Baseline", model)
 
@@ -90,16 +83,13 @@ if st.button("▶️ Run Optimization"):
             run_method("Quantization", simulate_quantization(model))
 
         if run_all or selected_method == "Pruning":
-            run_method("Pruning", simulate_pruning(model))
+            run_method("Pruning", safe_pruning(model))
 
         if run_all or selected_method == "Distillation":
             run_method("Distillation", simulate_distillation(model, X_input))
 
         results = pd.DataFrame(results_list)
 
-        # =========================
-        # LOG NORMALIZED SCORING
-        # =========================
         norm = results.copy()
 
         norm["Latency"] = 1 / norm["Latency"]
@@ -123,16 +113,43 @@ if st.button("▶️ Run Optimization"):
 
         best_method = results.loc[results["Score"].idxmax()]["Method"]
 
-        # =========================
-        # OUTPUT
-        # =========================
         st.success("✅ Optimization Complete!")
         st.dataframe(results)
         st.success(f"🏆 Best Method: {best_method}")
 
+        best_preds = predictions_map[best_method]
+
+        if "Baseline" in predictions_map:
+            baseline_preds = predictions_map["Baseline"]
+            similarity = (best_preds == baseline_preds).mean()
+            if similarity == 1.0:
+                st.warning("⚠️ Optimization did not change predictions")
+
+        if len(set(best_preds)) == 1:
+            st.error("❌ Model collapsed: predicting only one class")
+
         # =========================
-        # 📊 METRIC GRAPH
+        # FIXED COLORED TABLE
         # =========================
+        st.subheader("📊 Classification Report")
+
+        report_dict = classification_report(y, best_preds, output_dict=True)
+        report_df = pd.DataFrame(report_dict).transpose().round(3)
+
+        def highlight(val):
+            if isinstance(val, float):
+                if val >= 0.7:
+                    return "background-color: #2ecc71; color: black;"
+                elif val >= 0.4:
+                    return "background-color: #f1c40f; color: black;"
+                else:
+                    return "background-color: #e74c3c; color: white;"
+            return ""
+
+        styled_df = report_df.style.map(highlight)  # ✅ FIXED HERE
+
+        st.dataframe(styled_df)
+
         st.subheader("📊 Metric Comparison")
 
         fig, ax = plt.subplots(figsize=(10, 5))
@@ -143,9 +160,6 @@ if st.button("▶️ Run Optimization"):
         plt.tight_layout()
         st.pyplot(fig)
 
-        # =========================
-        # 📈 SCORE GRAPH
-        # =========================
         st.subheader("📈 Overall Score Comparison")
 
         fig2, ax2 = plt.subplots(figsize=(8, 4))
@@ -158,9 +172,6 @@ if st.button("▶️ Run Optimization"):
         plt.tight_layout()
         st.pyplot(fig2)
 
-        # =========================
-        # DOWNLOAD FIX
-        # =========================
         best_model = model_map[best_method]
 
         output_path = "optimized_model.pkl"
