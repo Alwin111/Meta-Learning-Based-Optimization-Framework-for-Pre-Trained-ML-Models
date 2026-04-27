@@ -21,3 +21,19 @@ __pycache__/
 .DS_Store
 
 # 🔴 Jupyter
+# Models
+*.pkl
+*.onnx
+*.bin
+
+# Data
+*.csv
+*.xlsx
+
+# Large folders
+user_input/
+datasets/
+
+# Python
+__pycache__/
+*.pyc
